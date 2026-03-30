@@ -56,7 +56,8 @@ export default function ReportPage() {
 
   if (!analysis) return null
 
-  const { summary, ai_explanation, anomalies, trends } = analysis
+  const { summary, anomalies = [], trends = {} } = analysis
+  const ai_explanation = analysis.ai_explanation ?? {} as AnalysisResult['ai_explanation']
 
   const chartData = (Object.keys(trends) as Array<keyof typeof trends>).map((key) => ({
     name: key,
@@ -202,40 +203,33 @@ export default function ReportPage() {
             </section>
 
             {/* SECTION 2: AI Explanation */}
-            <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-1">
-                <h2 className="text-lg font-bold mb-4 text-gray-900 dark:text-gray-100 flex items-center gap-2 uppercase tracking-wide">
-                  <Terminal className="w-5 h-5 text-teal-500" /> AI Diagnostic
-                </h2>
-                <Card className="bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 p-6 h-full shadow-sm flex flex-col justify-center">
-                  <div className="mb-4">
-                    <span className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800`}>
-                      Severity: {ai_explanation.severity || 'UNKNOWN'}
-                    </span>
-                  </div>
-                  <h4 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Detected Error Signature</h4>
-                  <div className="bg-zinc-900 text-red-300 p-4 rounded-xl border border-zinc-800 font-mono text-xs leading-relaxed break-words shadow-inner">
-                    {ai_explanation.error_message || 'No specific error message cleanly extracted.'}
-                  </div>
-                </Card>
-              </div>
-              
-              <div className="lg:col-span-2">
-                <Card className="bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 p-8 h-full shadow-sm">
-                  <div className="mb-8">
-                    <h4 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                      <Terminal className="w-4 h-4" /> Root Cause Analysis
-                    </h4>
-                    <p className="text-gray-800 dark:text-gray-200 leading-relaxed text-base pt-2">
-                      {ai_explanation.root_cause}
+            <section>
+              <h2 className="text-lg font-bold mb-4 text-gray-900 dark:text-gray-100 flex items-center gap-2 uppercase tracking-wide">
+                <Terminal className="w-5 h-5 text-teal-500" /> AI Diagnostic
+              </h2>
+              <Card className="bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 p-8 shadow-sm">
+                <div className="space-y-6">
+                  {/* Error message code block */}
+                  <div className="bg-gray-50 dark:bg-zinc-800 rounded-lg p-4 border border-gray-200 dark:border-zinc-700">
+                    <p className="text-gray-800 dark:text-gray-300 font-mono text-sm break-words leading-relaxed">
+                      {ai_explanation.error_message || 'No error message'}
                     </p>
                   </div>
 
-                  {ai_explanation.fix_steps?.length > 0 && (
+                  {/* Root cause */}
+                  <div>
+                    <p className="text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider font-bold mb-2">Root Cause</p>
+                    <p className="text-gray-800 dark:text-gray-200 leading-relaxed text-base">
+                      {typeof ai_explanation.root_cause === 'string' ? ai_explanation.root_cause : JSON.stringify(ai_explanation.root_cause)}
+                    </p>
+                  </div>
+
+                  {/* Fix steps */}
+                  {Array.isArray(ai_explanation.fix_steps) && ai_explanation.fix_steps.length > 0 && (
                     <div>
-                      <h4 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Recommended Resolution Steps</h4>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider font-bold mb-3">Fix Steps</p>
                       <div className="space-y-3">
-                        {ai_explanation.fix_steps.map((step, i) => (
+                        {ai_explanation.fix_steps.map((step: string, i: number) => (
                           <div key={i} className="flex gap-4 items-start bg-gray-50 dark:bg-zinc-800/50 p-4 rounded-xl border border-gray-100 dark:border-zinc-800">
                             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-400 text-xs font-bold shrink-0 mt-0.5">
                               {i + 1}
@@ -246,8 +240,15 @@ export default function ReportPage() {
                       </div>
                     </div>
                   )}
-                </Card>
-              </div>
+
+                  {/* Severity badge */}
+                  <div className="pt-2">
+                    <span className={`px-4 py-1.5 rounded-full text-sm font-semibold ${severityClass}`}>
+                      {ai_explanation.severity || 'UNKNOWN'}
+                    </span>
+                  </div>
+                </div>
+              </Card>
             </section>
 
             {/* SECTION 3: Log Level Trends */}

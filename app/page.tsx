@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -48,10 +48,34 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
-  const handleFileDrop = (droppedFile: File) => {
-    setFile(droppedFile)
+  const clearState = () => {
+    setFile(null)
     setAnalysis(null)
     setError(null)
+    localStorage.removeItem('logSenseAnalysis')
+    localStorage.removeItem('logSenseFileName')
+    localStorage.removeItem('logSenseFileSize')
+    localStorage.removeItem('logSenseDate')
+  }
+
+  useEffect(() => {
+    const savedAnalysis = localStorage.getItem('logSenseAnalysis')
+    const savedFileName = localStorage.getItem('logSenseFileName')
+    const savedFileSize = localStorage.getItem('logSenseFileSize')
+
+    if (savedAnalysis && savedFileName) {
+      try {
+        setAnalysis(JSON.parse(savedAnalysis))
+        setFile({ name: savedFileName, size: savedFileSize ? parseInt(savedFileSize, 10) : 0 } as any as File)
+      } catch (err) {
+        console.error('Failed to parse saved analysis', err)
+      }
+    }
+  }, [])
+
+  const handleFileDrop = (droppedFile: File) => {
+    clearState()
+    setFile(droppedFile)
   }
 
   const handleBrowse = () => {
@@ -60,9 +84,8 @@ export default function Home() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
+      clearState()
       setFile(e.target.files[0])
-      setAnalysis(null)
-      setError(null)
     }
   }
 
@@ -100,6 +123,7 @@ export default function Home() {
       // Save data for the Report page
       localStorage.setItem('logSenseAnalysis', JSON.stringify(data))
       localStorage.setItem('logSenseFileName', file.name)
+      localStorage.setItem('logSenseFileSize', file.size.toString())
       localStorage.setItem('logSenseDate', new Date().toISOString())
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'An unexpected error occurred'
@@ -164,7 +188,7 @@ export default function Home() {
                     Analyze Now
                   </Button>
                   <Button
-                    onClick={() => { setFile(null); setAnalysis(null); setError(null) }}
+                    onClick={clearState}
                     variant="outline"
                     className="rounded-full px-8 py-6 border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-800 text-lg font-medium w-full sm:w-auto"
                   >
@@ -205,11 +229,7 @@ export default function Home() {
                 View Full Report
               </Button>
               <Button
-                onClick={() => {
-                  setFile(null)
-                  setAnalysis(null)
-                  setError(null)
-                }}
+                onClick={clearState}
                 variant="outline"
                 className="rounded-full px-8 py-6 border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-800 text-lg font-medium"
               >

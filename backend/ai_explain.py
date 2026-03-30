@@ -63,10 +63,27 @@ def explain_error(error_message: str) -> dict:
                 raw = raw[4:]
 
         parsed = json.loads(raw)
+        
+        # Validate and sanitize fields
+        root_cause = parsed.get("root_cause", "Unable to determine root cause.")
+        if not isinstance(root_cause, str):
+            root_cause = str(root_cause)
+            
+        fix_steps = parsed.get("fix_steps", [])
+        if not isinstance(fix_steps, list):
+            # If it's a string, try to split it or wrap it
+            if isinstance(fix_steps, str):
+                fix_steps = [fix_steps]
+            else:
+                fix_steps = []
+        
+        # Ensure all steps are strings
+        fix_steps = [str(step) for step in fix_steps if step]
+
         return {
             "error_message": error_message,
-            "root_cause": parsed.get("root_cause", "Unable to determine root cause."),
-            "fix_steps": parsed.get("fix_steps", []),
+            "root_cause": root_cause,
+            "fix_steps": fix_steps,
             "severity": parsed.get("severity", "MEDIUM"),
         }
     except json.JSONDecodeError:
