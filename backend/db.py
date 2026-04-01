@@ -1,7 +1,6 @@
 """
 db.py — MongoDB connection singleton using PyMongo.
 """
-
 import os
 from pymongo import MongoClient
 from dotenv import load_dotenv
@@ -10,7 +9,6 @@ load_dotenv()
 
 _client: MongoClient | None = None
 DB_NAME = "logsense"
-
 
 def get_db():
     """Return the logsense MongoDB database, creating the client once."""
