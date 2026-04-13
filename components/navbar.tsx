@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 import { ThemeToggle } from './theme-toggle'
 import { LogSenseLogo } from '@/components/logo'
@@ -14,14 +16,27 @@ export default function Navbar() {
         </Link>
         
         <div className="flex items-center gap-4">
-          <Link 
-            href="/report" 
-            className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
-          >
-            Report
-          </Link>
-          <div className="h-6 w-px bg-gray-200 dark:bg-zinc-800" />
-          <ThemeToggle />
+            <Link 
+              href="/upload" 
+              className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
+            >
+              Upload
+            </Link>
+            <Link 
+              href="/report" 
+              onClick={(e) => {
+                const hasData = typeof window !== 'undefined' && window.localStorage.getItem('logSenseAnalysis');
+                if (!hasData) {
+                  e.preventDefault();
+                  alert("No analysis data available. Please upload and analyze a log file first.");
+                }
+              }}
+              className="text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
+            >
+              Report
+            </Link>
+            <div className="h-6 w-px bg-gray-200 dark:bg-zinc-800" />
+            <ThemeToggle />
         </div>
       </div>
     </nav>

@@ -1,11 +1,12 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, Fragment } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import type { AnalysisResult } from '@/app/page'
+import { ChevronDown, ChevronRight, Fingerprint, Layers } from 'lucide-react'
+import type { AnalysisResult } from '@/app/upload/page'
 
 interface ResultsSectionProps {
   analysis: AnalysisResult
@@ -18,6 +19,13 @@ const LEVEL_COLORS: Record<string, string> = {
   DEBUG: '#6b7280',
 }
 
+const LEVEL_BG: Record<string, string> = {
+  ERROR: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  WARNING: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  INFO: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  DEBUG: 'bg-gray-100 text-gray-700 dark:bg-zinc-700/50 dark:text-gray-400',
+}
+
 const SEVERITY_CLASS: Record<string, string> = {
   CRITICAL: 'bg-red-900 text-red-100',
   HIGH: 'bg-orange-900 text-orange-100',
@@ -28,7 +36,9 @@ const SEVERITY_CLASS: Record<string, string> = {
 
 export default function ResultsSection({ analysis }: ResultsSectionProps) {
   const [filter, setFilter] = useState<string>('ALL')
-  const { summary, ai_explanation, anomalies, trends } = analysis
+  const [fpFilter, setFpFilter] = useState<string>('ALL')
+  const [expandedFp, setExpandedFp] = useState<Set<string>>(new Set())
+  const { summary, ai_explanation, anomalies, trends, fingerprints = [] } = analysis
 
   const chartData = (Object.keys(trends) as Array<keyof typeof trends>).map((key) => ({
     name: key,
@@ -55,8 +65,29 @@ export default function ResultsSection({ analysis }: ResultsSectionProps) {
     return Object.entries(counts)
       .map(([module, count]) => ({ module, count }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 5) // Top 5
+      .slice(0, 5)
   }, [anomalies])
+
+  // Filtered fingerprints
+  const filteredFingerprints = useMemo(() => {
+    if (fpFilter === 'ALL') return fingerprints
+    return fingerprints.filter(fp => fp.level === fpFilter)
+  }, [fingerprints, fpFilter])
+
+  // Deduplication ratio
+  const dedupRatio = useMemo(() => {
+    if (summary.total === 0 || fingerprints.length === 0) return 0
+    return Math.round(((summary.total - fingerprints.length) / summary.total) * 100)
+  }, [summary.total, fingerprints.length])
+
+  const toggleExpand = (fpId: string) => {
+    setExpandedFp(prev => {
+      const next = new Set(prev)
+      if (next.has(fpId)) next.delete(fpId)
+      else next.add(fpId)
+      return next
+    })
+  }
 
   return (
     <div className="mb-20">
@@ -88,20 +119,15 @@ export default function ResultsSection({ analysis }: ResultsSectionProps) {
         <Card className="bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 p-8 shadow-sm">
           <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6">AI Explanation</h3>
           <div className="space-y-4">
-            {/* Error message code block */}
             <div className="bg-gray-50 dark:bg-zinc-800 rounded-lg p-3 border border-gray-200 dark:border-zinc-700 max-h-28 overflow-y-auto">
               <p className="text-gray-800 dark:text-gray-300 font-mono text-xs break-words leading-relaxed">
                 {ai_explanation.error_message || 'No error message'}
               </p>
             </div>
-
-            {/* Root cause */}
             <div>
               <p className="text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider mb-1">Root Cause</p>
               <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">{ai_explanation.root_cause}</p>
             </div>
-
-            {/* Fix steps */}
             {ai_explanation.fix_steps?.length > 0 && (
               <div>
                 <p className="text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider mb-2">Fix Steps</p>
@@ -115,8 +141,6 @@ export default function ResultsSection({ analysis }: ResultsSectionProps) {
                 </ol>
               </div>
             )}
-
-            {/* Severity badge */}
             <div className="pt-1">
               <span className={`px-3 py-1 rounded-full text-sm font-semibold ${severityClass}`}>
                 {ai_explanation.severity || 'UNKNOWN'}
@@ -143,16 +167,14 @@ export default function ResultsSection({ analysis }: ResultsSectionProps) {
                     color: '#fff',
                   }}
                 />
-              <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                {chartData.map((entry) => (
-                  <Cell key={entry.name} fill={entry.color} />
-                ))}
-              </Bar>
-            </BarChart>
+                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                  {chartData.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </div>
-          
-          {/* Top Error Patterns Grouping */}
           {topErrorPatterns.length > 0 && (
             <div className="mt-8 pt-6 border-t border-gray-200 dark:border-zinc-800">
               <p className="text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider mb-3">
@@ -175,6 +197,167 @@ export default function ResultsSection({ analysis }: ResultsSectionProps) {
         </Card>
       </div>
 
+      {/* ── Fingerprints card ──────────────────────────────────── */}
+      {fingerprints.length > 0 && (
+        <Card className="bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 p-8 shadow-sm mb-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 gap-4">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <Fingerprint className="w-5 h-5 text-teal-500" />
+              Log Fingerprints
+              <span className="ml-2 text-sm font-normal text-teal-600 dark:text-teal-400 bg-teal-100 dark:bg-teal-900/40 px-2.5 py-0.5 rounded-full">
+                {fingerprints.length} unique patterns
+              </span>
+            </h3>
+
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-full px-3 py-1.5">
+                <Layers className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-emerald-700 dark:text-emerald-300 text-xs font-semibold">
+                  {dedupRatio}% noise reduction
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {['ALL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'].map(level => {
+                  const count = level === 'ALL'
+                    ? fingerprints.length
+                    : fingerprints.filter(fp => fp.level === level).length
+                  if (level !== 'ALL' && count === 0) return null
+                  return (
+                    <Button
+                      key={level}
+                      variant={fpFilter === level ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setFpFilter(level)}
+                      className={`rounded-full text-xs font-semibold ${
+                        fpFilter === level
+                          ? 'bg-teal-600 hover:bg-teal-700 text-white border-transparent'
+                          : 'border-gray-300 dark:border-zinc-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-zinc-800'
+                      }`}
+                    >
+                      {level} <span className="opacity-70 ml-1">({count})</span>
+                    </Button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-4 p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-lg border border-gray-100 dark:border-zinc-700/50">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="font-semibold text-gray-900 dark:text-white">{fingerprints.length}</span> unique patterns detected from{' '}
+              <span className="font-semibold text-gray-900 dark:text-white">{summary.total.toLocaleString()}</span> total log lines
+              {dedupRatio > 0 && (
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                  {' '}&mdash; {dedupRatio}% of logs are duplicates
+                </span>
+              )}
+            </p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-zinc-700 text-gray-500 uppercase text-xs tracking-wider">
+                  <th className="pb-3 pr-2 pl-2 w-8"></th>
+                  <th className="pb-3 pr-4 text-center w-20">Count</th>
+                  <th className="pb-3 pr-4 w-24">Level</th>
+                  <th className="pb-3 pr-4">Pattern</th>
+                  <th className="pb-3 pr-4 w-40">Modules</th>
+                  <th className="pb-3 w-48">Time Range</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredFingerprints.slice(0, 50).map((fp) => {
+                  const isExpanded = expandedFp.has(fp.fingerprint_id)
+                  const levelBg = LEVEL_BG[fp.level] ?? LEVEL_BG.DEBUG
+
+                  return (
+                    <Fragment key={fp.fingerprint_id}>
+                      <tr
+                        onClick={() => toggleExpand(fp.fingerprint_id)}
+                        className="border-b border-gray-100 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer group"
+                      >
+                        <td className="py-3 pr-2 pl-2 text-gray-400">
+                          {isExpanded
+                            ? <ChevronDown className="w-4 h-4" />
+                            : <ChevronRight className="w-4 h-4 group-hover:text-teal-500 transition-colors" />
+                          }
+                        </td>
+                        <td className="py-3 pr-4 text-center">
+                          <span className="inline-flex items-center justify-center min-w-[40px] bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 text-sm font-bold px-2.5 py-1 rounded-full">
+                            {fp.count.toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="py-3 pr-4">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${levelBg}`}>
+                            {fp.level}
+                          </span>
+                        </td>
+                        <td className="py-3 pr-4 text-gray-800 dark:text-gray-300 font-mono text-xs max-w-sm truncate" title={fp.pattern}>
+                          {fp.pattern}
+                        </td>
+                        <td className="py-3 pr-4">
+                          <div className="flex flex-wrap gap-1">
+                            {fp.modules.slice(0, 3).map((mod, i) => (
+                              <span key={i} className="bg-gray-100 dark:bg-zinc-700 text-gray-600 dark:text-gray-300 text-[10px] font-medium px-2 py-0.5 rounded-full">
+                                {mod}
+                              </span>
+                            ))}
+                            {fp.modules.length > 3 && (
+                              <span className="bg-gray-100 dark:bg-zinc-700 text-gray-500 text-[10px] px-2 py-0.5 rounded-full">
+                                +{fp.modules.length - 3}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 text-gray-500 dark:text-gray-400 font-mono text-[11px] whitespace-nowrap">
+                          {fp.first_seen || '\u2014'}
+                          {fp.first_seen && fp.last_seen && fp.first_seen !== fp.last_seen && (
+                            <span className="text-gray-400 dark:text-gray-500"> \u2192 {fp.last_seen}</span>
+                          )}
+                        </td>
+                      </tr>
+
+                      {isExpanded && (
+                        <tr className="border-b border-gray-100 dark:border-zinc-800 bg-gray-50/80 dark:bg-zinc-800/30">
+                          <td colSpan={6} className="py-4 px-6">
+                            <div className="space-y-3">
+                              <div>
+                                <p className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider font-bold mb-1.5">Sample Log Message</p>
+                                <div className="bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg p-3">
+                                  <p className="text-gray-800 dark:text-gray-300 font-mono text-xs break-words leading-relaxed">
+                                    {fp.sample_message}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-6 text-xs text-gray-500 dark:text-gray-400">
+                                <span>Fingerprint: <code className="text-teal-600 dark:text-teal-400 font-mono bg-teal-50 dark:bg-teal-900/20 px-1.5 py-0.5 rounded">{fp.fingerprint_id}</code></span>
+                                <span>Modules: <span className="font-medium text-gray-700 dark:text-gray-300">{fp.modules.join(', ')}</span></span>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+            {filteredFingerprints.length > 50 && (
+              <p className="text-gray-500 text-xs mt-3">
+                Showing 50 of {filteredFingerprints.length} fingerprints.
+              </p>
+            )}
+            {filteredFingerprints.length === 0 && (
+              <p className="text-gray-500 dark:text-gray-400 text-sm mt-8 text-center py-8">
+                No fingerprints found for level &quot;{fpFilter}&quot;.
+              </p>
+            )}
+          </div>
+        </Card>
+      )}
+
       {/* ── Anomalies card (shown only when anomalies exist) ────── */}
       {anomalies.length > 0 && (
         <Card className="bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 p-8 shadow-sm">
@@ -186,7 +369,6 @@ export default function ResultsSection({ analysis }: ResultsSectionProps) {
               </span>
             </h3>
 
-            {/* Filter Bar */}
             <div className="flex flex-wrap gap-2">
               {[
                 { label: 'ALL', count: anomalies.length },
@@ -229,19 +411,20 @@ export default function ResultsSection({ analysis }: ResultsSectionProps) {
 
                   return (
                     <tr key={i} className={`border-b border-gray-100 dark:border-zinc-800 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors ${borderClass}`}>
-                      <td className="py-3 pr-4 pl-3 text-gray-600 dark:text-gray-400 font-mono text-xs whitespace-nowrap">{a.timestamp || '—'}</td>
+                      <td className="py-3 pr-4 pl-3 text-gray-600 dark:text-gray-400 font-mono text-xs whitespace-nowrap">{a.timestamp || '\u2014'}</td>
                       <td className="py-3 pr-4">
-                      <span
-                        style={{ color: LEVEL_COLORS[a.level] ?? '#9ca3af' }}
-                        className="font-semibold"
-                      >
-                        {a.level}
-                      </span>
-                    </td>
-                    <td className="py-3 pr-4 text-gray-600 dark:text-gray-400 font-mono text-xs">{a.module}</td>
-                    <td className="py-3 text-gray-800 dark:text-gray-300 break-words max-w-xs">{a.message}</td>
-                  </tr>
-                )})}
+                        <span
+                          style={{ color: LEVEL_COLORS[a.level] ?? '#9ca3af' }}
+                          className="font-semibold"
+                        >
+                          {a.level}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-4 text-gray-600 dark:text-gray-400 font-mono text-xs">{a.module}</td>
+                      <td className="py-3 text-gray-800 dark:text-gray-300 break-words max-w-xs">{a.message}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
             {filteredAnomalies.length > 50 && (
@@ -251,7 +434,7 @@ export default function ResultsSection({ analysis }: ResultsSectionProps) {
             )}
             {filteredAnomalies.length === 0 && (
               <p className="text-gray-500 dark:text-gray-400 text-sm mt-8 text-center py-8">
-                No anomalies found for level "{filter}".
+                No anomalies found for level &quot;{filter}&quot;.
               </p>
             )}
           </div>
@@ -260,4 +443,3 @@ export default function ResultsSection({ analysis }: ResultsSectionProps) {
     </div>
   )
 }
-

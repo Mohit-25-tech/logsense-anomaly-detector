@@ -1,14 +1,14 @@
-import { Cloud, Check } from 'lucide-react'
+import { Cloud } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { useState } from 'react'
 
 interface UploadZoneProps {
-  onFileDrop: (file: File) => void
+  onFilesDrop: (files: File[]) => void
   onBrowse: () => void
 }
 
-export default function UploadZone({ onFileDrop, onBrowse }: UploadZoneProps) {
+export default function UploadZone({ onFilesDrop, onBrowse }: UploadZoneProps) {
   const [isDragActive, setIsDragActive] = useState(false)
 
   const handleDrag = (e: React.DragEvent) => {
@@ -26,21 +26,10 @@ export default function UploadZone({ onFileDrop, onBrowse }: UploadZoneProps) {
     e.stopPropagation()
     setIsDragActive(false)
 
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      onFileDrop(e.dataTransfer.files[0])
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const filesArr = Array.from(e.dataTransfer.files)
+      onFilesDrop(filesArr)
     }
-  }
-
-  const handleFileSelect = (file: File) => {
-    onFileDrop(file)
-  }
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
   }
 
   return (
@@ -59,15 +48,17 @@ export default function UploadZone({ onFileDrop, onBrowse }: UploadZoneProps) {
         className={`w-16 h-16 mx-auto mb-4 stroke-1 fill-none transition-colors ${isDragActive ? 'text-teal-500' : 'text-gray-400 dark:text-teal-400/60'}`} 
         strokeWidth={1.5}
       />
-      <p className="text-gray-800 dark:text-white text-lg mb-2 font-semibold">Drop your .log or .txt file here</p>
+      <p className="text-gray-800 dark:text-white text-lg mb-1 font-semibold">Drop your log files here</p>
+      <p className="text-gray-500 dark:text-gray-400 text-sm mb-1">Multiple files supported for cross-service correlation</p>
       <p className="text-gray-500 dark:text-gray-400 mb-6">or</p>
       <input
         type="file"
         id="file-input"
-        accept=".log,.txt,.csv"
+        accept=".log,.txt"
+        multiple
         onChange={(e) => {
-          if (e.target.files && e.target.files[0]) {
-            handleFileSelect(e.target.files[0])
+          if (e.target.files && e.target.files.length > 0) {
+            onFilesDrop(Array.from(e.target.files))
           }
         }}
         className="hidden"
@@ -78,10 +69,10 @@ export default function UploadZone({ onFileDrop, onBrowse }: UploadZoneProps) {
           className="bg-teal-600 hover:bg-teal-700 text-white rounded-full px-8 py-2 font-semibold cursor-pointer"
           asChild
         >
-          <span>Browse File</span>
+          <span>Browse Files</span>
         </Button>
       </label>
-      <p className="text-gray-500 text-xs mt-6">Supported formats: .log .txt .csv</p>
+      <p className="text-gray-500 text-xs mt-6">Supported formats: .log .txt</p>
     </Card>
   )
 }

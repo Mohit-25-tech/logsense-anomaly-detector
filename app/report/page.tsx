@@ -9,12 +9,12 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Legend
 } from 'recharts'
-import { Printer, ArrowLeft, Download, Loader2, AlertTriangle, Info, FileText, CheckCircle2, Terminal } from 'lucide-react'
+import { Printer, ArrowLeft, Download, Loader2, AlertTriangle, Info, FileText, CheckCircle2, Terminal, Fingerprint } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import Navbar from '@/components/navbar'
 import { LogSenseLogo } from '@/components/logo'
-import type { AnalysisResult } from '@/app/page'
+import type { AnalysisResult } from '@/app/upload/page'
 
 const LEVEL_COLORS: Record<string, string> = {
   ERROR: '#ef4444',
@@ -56,8 +56,12 @@ export default function ReportPage() {
 
   if (!analysis) return null
 
-  const { summary, anomalies = [], trends = {} } = analysis
+  const { summary, anomalies = [], trends = {}, fingerprints = [] } = analysis
   const ai_explanation = analysis.ai_explanation ?? {} as AnalysisResult['ai_explanation']
+
+  const dedupRatio = summary.total > 0 && fingerprints.length > 0
+    ? Math.round(((summary.total - fingerprints.length) / summary.total) * 100)
+    : 0
 
   const chartData = (Object.keys(trends) as Array<keyof typeof trends>).map((key) => ({
     name: key,
@@ -251,7 +255,63 @@ export default function ReportPage() {
               </Card>
             </section>
 
-            {/* SECTION 3: Log Level Trends */}
+            {/* SECTION 3: Log Fingerprints */}
+            {fingerprints.length > 0 && (
+              <section>
+                <h2 className="text-lg font-bold mb-4 text-gray-900 dark:text-gray-100 flex items-center gap-2 uppercase tracking-wide">
+                  <Fingerprint className="w-5 h-5 text-teal-500" /> Log Fingerprints
+                  <span className="ml-2 text-sm font-normal text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2.5 py-0.5 rounded-full">
+                    {dedupRatio}% noise reduction
+                  </span>
+                </h2>
+                <Card className="bg-white dark:bg-zinc-900 border-gray-200 dark:border-zinc-800 shadow-sm overflow-hidden">
+                  <div className="p-4 bg-gray-50 dark:bg-zinc-800/50 border-b border-gray-200 dark:border-zinc-700">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <span className="font-semibold text-gray-900 dark:text-white">{fingerprints.length}</span> unique patterns from{' '}
+                      <span className="font-semibold text-gray-900 dark:text-white">{summary.total.toLocaleString()}</span> total logs
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead className="bg-gray-50/50 dark:bg-zinc-800/50">
+                        <tr className="border-b border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-gray-400 font-bold uppercase tracking-wider text-[10px]">
+                          <th className="py-4 px-6">Count</th>
+                          <th className="py-4 px-6">Level</th>
+                          <th className="py-4 px-6">Pattern</th>
+                          <th className="py-4 px-6">Modules</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {fingerprints.slice(0, 10).map((fp: any, i: number) => {
+                          const isError = fp.level === 'ERROR'
+                          const isWarn = fp.level === 'WARNING'
+                          const badgeBg = isError ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : isWarn ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+
+                          return (
+                            <tr key={i} className="border-b border-gray-100 dark:border-zinc-800 last:border-0 hover:bg-gray-50 dark:hover:bg-zinc-800/30 transition-colors">
+                              <td className="py-4 px-6">
+                                <span className="inline-flex items-center justify-center min-w-[36px] bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 text-sm font-bold px-2 py-0.5 rounded-full">
+                                  {fp.count.toLocaleString()}
+                                </span>
+                              </td>
+                              <td className="py-4 px-6">
+                                <span className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider ${badgeBg}`}>
+                                  {fp.level}
+                                </span>
+                              </td>
+                              <td className="py-4 px-6 text-gray-800 dark:text-gray-200 font-mono text-xs break-words max-w-xs">{fp.pattern}</td>
+                              <td className="py-4 px-6 text-gray-600 dark:text-gray-300 text-xs">{fp.modules?.join(', ') || '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              </section>
+            )}
+
+            {/* SECTION 4: Log Level Trends */}
             <section>
               <h2 className="text-lg font-bold mb-4 text-gray-900 dark:text-gray-100 flex items-center gap-2 uppercase tracking-wide">
                 <BarChart className="w-5 h-5 text-teal-500" /> System Trends

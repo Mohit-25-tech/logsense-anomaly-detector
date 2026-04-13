@@ -2,8 +2,8 @@
 app.py — Main Flask application for LogSense backend.
 
 Routes:
-  POST /upload   — Accept and parse a .log/.txt file → save to MongoDB
-  GET  /analyze  — Run anomaly detection + AI explanation → return JSON
+  POST /upload   — Accept and parse one or more .log/.txt files → save to MongoDB
+  GET  /analyze  — Run anomaly detection, fingerprinting, correlation + AI → JSON
 
 CORS is enabled for http://localhost:3000 (Next.js dev server).
 """
@@ -18,6 +18,8 @@ from parser import parse_log_file
 from db import get_db
 from analyzer import detect_anomalies
 from ai_explain import explain_error
+from fingerprint import build_fingerprint_groups
+from correlator import detect_correlations
 
 load_dotenv()
 
@@ -33,35 +35,66 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 @app.route("/upload", methods=["POST"])
 def upload():
     """
-    Accept a multipart/form-data file upload (field name: "file").
-    Parse all log lines and save to MongoDB collection "logs_raw".
+    Accept multipart/form-data file upload(s).
+    Supports both single file (field: "file") and multiple files (field: "files").
+    Parse all log lines, tag each with its source filename, and save to MongoDB.
     """
-    if "file" not in request.files:
-        return jsonify({"error": "No file field in request"}), 400
+    # ── Collect files from request ────────────────────────────────────────────
+    uploaded_files = request.files.getlist("files")
 
-    f = request.files["file"]
-    filename: str = f.filename or ""
+    # Backward compatibility: also check for single "file" field
+    if not uploaded_files:
+        single = request.files.get("file")
+        if single:
+            uploaded_files = [single]
 
-    if not (filename.endswith(".log") or filename.endswith(".txt")):
-        return jsonify({"error": "Only .log or .txt files are accepted"}), 400
+    if not uploaded_files:
+        return jsonify({"error": "No file(s) provided. Use 'files' or 'file' field."}), 400
 
-    try:
-        content = f.read().decode("utf-8", errors="replace")
-    except Exception as exc:
-        return jsonify({"error": f"Could not read file: {exc}"}), 400
+    # ── Parse each file ───────────────────────────────────────────────────────
+    all_parsed: list[dict] = []
+    source_names: list[str] = []
 
-    parsed_logs = parse_log_file(content)
+    for f in uploaded_files:
+        filename: str = f.filename or "unknown"
 
-    if not parsed_logs:
-        return jsonify({"error": "No parseable log lines found in the file"}), 422
+        if not (filename.endswith(".log") or filename.endswith(".txt")):
+            return jsonify({"error": f"Only .log or .txt files accepted. Got: {filename}"}), 400
 
+        try:
+            content = f.read().decode("utf-8", errors="replace")
+        except Exception as exc:
+            return jsonify({"error": f"Could not read {filename}: {exc}"}), 400
+
+        parsed_logs = parse_log_file(content)
+
+        if not parsed_logs:
+            continue  # skip empty files silently
+
+        # Tag each log with its source filename
+        for log in parsed_logs:
+            log["source"] = filename
+
+        all_parsed.extend(parsed_logs)
+        source_names.append(filename)
+
+    if not all_parsed:
+        return jsonify({"error": "No parseable log lines found in the uploaded file(s)"}), 422
+
+    # ── Sort by timestamp for chronological ordering ──────────────────────────
+    all_parsed.sort(key=lambda l: l.get("timestamp", ""))
+
+    # ── Store in MongoDB ──────────────────────────────────────────────────────
     db = get_db()
     collection = db["logs_raw"]
-    # Clear previous upload before storing new one
-    collection.delete_many({})
-    collection.insert_many(parsed_logs)
+    collection.delete_many({})  # Clear previous upload
+    collection.insert_many(all_parsed)
 
-    return jsonify({"success": True, "total_lines": len(parsed_logs)}), 200
+    return jsonify({
+        "success": True,
+        "total_lines": len(all_parsed),
+        "sources": source_names,
+    }), 200
 
 
 # ─────────────────────────────────────────────
@@ -70,8 +103,8 @@ def upload():
 @app.route("/analyze", methods=["GET"])
 def analyze():
     """
-    Fetch logs from MongoDB "logs_raw", run anomaly detection and AI
-    explanation, then persist results and return them as JSON.
+    Fetch logs from MongoDB "logs_raw", run anomaly detection, fingerprinting,
+    correlation, and AI explanation, then persist results and return as JSON.
     """
     db = get_db()
     raw_col = db["logs_raw"]
@@ -100,10 +133,18 @@ def analyze():
     # ── Anomaly detection ─────────────────────────────────────────────────────
     anomalies = detect_anomalies(logs)
 
+    # ── Fingerprinting / deduplication ────────────────────────────────────────
+    fingerprints = build_fingerprint_groups(logs)
+    summary["unique_patterns"] = len(fingerprints)
+
+    # ── Multi-file correlation ────────────────────────────────────────────────
+    sources = list(set(log.get("source", "unknown") for log in logs))
+    summary["sources_count"] = len(sources)
+    correlation = detect_correlations(logs, sources)
+
     # ── AI explanation for the most critical error ────────────────────────────
     error_logs = [l for l in logs if l.get("level", "").upper() == "ERROR"]
     if error_logs:
-        # Pick the anomalous error if available, otherwise the first error
         anomaly_errors = [a for a in anomalies if a.get("level", "").upper() == "ERROR"]
         target_log = anomaly_errors[0] if anomaly_errors else error_logs[0]
         critical_message = target_log.get("message", "")
@@ -117,6 +158,8 @@ def analyze():
         "summary": summary,
         "ai_explanation": ai_explanation,
         "anomalies": anomalies,
+        "fingerprints": fingerprints,
+        "correlation": correlation,
         "trends": level_counts,
     }
 

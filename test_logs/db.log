@@ -1,0 +1,4 @@
+[2024-03-15 06:01:00] INFO cache - Cache hit ratio: 95%
+[2024-03-15 06:03:15] INFO database - Running scheduled maintenance
+[2024-03-15 06:05:30] ERROR database - Connection pool exhausted: max 20 connections reached
+[2024-03-15 06:08:00] INFO database - Pool recovering
